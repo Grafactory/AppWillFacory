@@ -1,0 +1,915 @@
+{
+  "name": "AppWill Content Factory",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "manual",
+        "values": {
+          "json": {
+            "message": {
+              "text": "Название: 3 Dead Tubbies\nСсылка: https://appwill.co/product/3-deadtubbies/\nЦена: $2,500\nДоход (3 мес): $388\nУстановки: 700K+\nКатегория: Хоррор-шутер\nСсылка на геймплей: https://youtu.be/XXXXX"
+            }
+          }
+        }
+      },
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "a1b2c3d4-e5f6-7890-g1h2-i3j4k5l6m7n8",
+      "notes": "Test payload with sample app data. Click 'Execute Node' to start workflow."
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [450, 300],
+      "credentials": {
+        "telegramApi": "={{$env.TELEGRAM_BOT_TOKEN}}"
+      },
+      "id": "b2c3d4e5-f6g7-8901-h2i3-j4k5l6m7n8o9",
+      "notes": "Requires TELEGRAM_BOT_TOKEN in environment variables."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate input\nconst message = $input.all()[0].json.message.text;\nconst result = {};\n\n// Extract fields\nresult.title = message.match(/Название:\\s*(.+)/i)?.[1]?.trim();\nresult.app_url = message.match(/Ссылка:\\s*(https?:\\/\\/[^\\s]+)/i)?.[1]?.trim();\nresult.price = message.match(/Цена:\\s*(\\$.+)/i)?.[1]?.trim();\nresult.revenue_3m = message.match(/Доход\\s*\\(3\\s*мес\\):\\s*(\\$.+)/i)?.[1]?.trim();\nresult.installs = message.match(/Установки:\\s*(.+)/i)?.[1]?.trim();\nresult.category = message.match(/Категория:\\s*(.+)/i)?.[1]?.trim();\nresult.gameplay_url = message.match(/Ссылка\\s*на\\s*геймплей:\\s*(https?:\\/\\/[^\\s]+)/i)?.[1]?.trim();\n\n// Extract YouTube video ID\nif (result.gameplay_url) {\n  const ytPatterns = [\n    /youtu\\.be\\/([^?]+)/,\n    /youtube\\.com\\/watch\\?v=([^&]+)/\n  ];\n  \n  for (const pattern of ytPatterns) {\n    const match = result.gameplay_url.match(pattern);\n    if (match) {\n      result.youtube_video_id = match[1];\n      break;\n    }\n  }\n}\n\nresult.valid = !!result.youtube_video_id;\nresult.submitted_at = new Date().toISOString();\n\nreturn [{ json: result }];"
+      },
+      "name": "Parse Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "id": "c3d4e5f6-g7h8-9012-i3j4-k5l6m7n8o9p0",
+      "notes": "Extracts and validates fields from message. Outputs structured JSON."
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{$env.GOOGLE_SHEETS_ID}}",
+        "lookupColumn": "A",
+        "lookupValue": "={{$node[\"Parse Message\"].json[\"app_url\"]}}",
+        "options": {}
+      },
+      "name": "Google Sheets Lookup",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [850, 200],
+      "credentials": {
+        "googleSheetsApi": "googleSheets"
+      },
+      "id": "d4e5f6g7-h8i9-0123-j4k5-l6m7n8o9p0q1",
+      "notes": "Checks if app already exists in sheet. Requires GOOGLE_SHEETS_ID."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$node[\"Google Sheets Lookup\"].json[\"row\"]}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1050, 200],
+      "id": "e5f6g7h8-i9j0-1234-k5l6-m7n8o9p0q1r2",
+      "notes": "Routes to update or append based on lookup result."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{$env.GOOGLE_SHEETS_ID}}",
+        "rowIndex": "={{$node[\"Google Sheets Lookup\"].json[\"row\"]}}",
+        "fields": {
+          "A": "={{$node[\"Parse Message\"].json[\"title\"]}}",
+          "B": "={{$node[\"Parse Message\"].json[\"price\"]}}",
+          "C": "={{$node[\"Parse Message\"].json[\"revenue_3m\"]}}",
+          "D": "={{$node[\"Parse Message\"].json[\"installs\"]}}",
+          "E": "={{$node[\"Parse Message\"].json[\"category\"]}}",
+          "F": "={{$node[\"Parse Message\"].json[\"gameplay_url\"]}}"
+        }
+      },
+      "name": "Update Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1250, 100],
+      "credentials": {
+        "googleSheetsApi": "googleSheets"
+      },
+      "id": "f6g7h8i9-j0k1-2345-l6m7-n8o9p0q1r2s3",
+      "notes": "Updates existing row with new data."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{$env.GOOGLE_SHEETS_ID}}",
+        "fields": {
+          "A": "={{$node[\"Parse Message\"].json[\"title\"]}}",
+          "B": "={{$node[\"Parse Message\"].json[\"price\"]}}",
+          "C": "={{$node[\"Parse Message\"].json[\"revenue_3m\"]}}",
+          "D": "={{$node[\"Parse Message\"].json[\"installs\"]}}",
+          "E": "={{$node[\"Parse Message\"].json[\"category\"]}}",
+          "F": "={{$node[\"Parse Message\"].json[\"gameplay_url\"]}}",
+          "G": "pending"
+        }
+      },
+      "name": "Append Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1250, 300],
+      "credentials": {
+        "googleSheetsApi": "googleSheets"
+      },
+      "id": "g7h8i9j0-k1l2-3456-m7n8-o9p0q1r2s3t4",
+      "notes": "Adds new row for previously unseen apps."
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "options": {
+          "qs": {
+            "part": "snippet,contentDetails",
+            "id": "={{$node[\"Parse Message\"].json[\"youtube_video_id\"]}}",
+            "key": "={{$env.YOUTUBE_API_KEY}}"
+          }
+        }
+      },
+      "name": "YouTube API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1450, 300],
+      "id": "h8i9j0k1-l2m3-4567-n8o9-p0q1r2s3t4u5",
+      "notes": "Fetches video metadata. Requires YOUTUBE_API_KEY."
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "maxTokens": 2000,
+        "temperature": 0.7,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert ad copywriter. Output MUST be valid JSON with these exact fields: {script_text, shots:[{start,end,visuals,caption}], voiceover_lines:[]}. No extra text."
+          },
+          {
+            "role": "user",
+            "content": "Create a 30-60s vertical video script for:\nTitle: {{$node[\"Parse Message\"].json[\"title\"]}}\nPrice: {{$node[\"Parse Message\"].json[\"price\"]}}\nRevenue: {{$node[\"Parse Message\"].json[\"revenue_3m\"]}}\nInstalls: {{$node[\"Parse Message\"].json[\"installs\"]}}\nCategory: {{$node[\"Parse Message\"].json[\"category\"]}}"
+          }
+        ]
+      },
+      "name": "GPT-4 Script",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1650, 100],
+      "credentials": {
+        "openAiApi": "={{$env.OPENAI_API_KEY}}"
+      },
+      "id": "i9j0k1l2-m3n4-5678-o9p0-q1r2s3t4u5v6",
+      "notes": "Generates video script. Requires OPENAI_API_KEY."
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "maxTokens": 300,
+        "temperature": 0.5,
+        "messages": [
+          {
+            "role": "system",
+            "content": "Generate a ≤220 character social media description with CTA. Output MUST be plain text."
+          },
+          {
+            "role": "user",
+            "content": "Write Instagram caption for:\nTitle: {{$node[\"Parse Message\"].json[\"title\"]}}\nPrice: {{$node[\"Parse Message\"].json[\"price\"]}}\nRevenue: {{$node[\"Parse Message\"].json[\"revenue_3m\"]}}\nInclude link: {{$node[\"Parse Message\"].json[\"app_url\"]}}"
+          }
+        ]
+      },
+      "name": "GPT-4 Description",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1650, 250],
+      "credentials": {
+        "openAiApi": "={{$env.OPENAI_API_KEY}}"
+      },
+      "id": "j0k1l2m3-n4o5-6789-p0q1-r2s3t4u5v6w7",
+      "notes": "Creates social media description."
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "maxTokens": 200,
+        "temperature": 0.3,
+        "messages": [
+          {
+            "role": "system",
+            "content": "Output MUST be JSON array with 10 hashtags max: [\"#tag1\",\"#tag2\"]"
+          },
+          {
+            "role": "user",
+            "content": "Generate trending hashtags for:\nCategory: {{$node[\"Parse Message\"].json[\"category\"]}}\nPrice: {{$node[\"Parse Message\"].json[\"price\"]}}"
+          }
+        ]
+      },
+      "name": "GPT-4 Hashtags",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1650, 400],
+      "credentials": {
+        "openAiApi": "={{$env.OPENAI_API_KEY}}"
+      },
+      "id": "k1l2m3n4-o5p6-7890-q1r2-s3t4u5v6w7x8",
+      "notes": "Generates relevant hashtags."
+    },
+    {
+      "parameters": {
+        "values": {
+          "assets": {
+            "gameplay_video": "={{$node[\"Parse Message\"].json[\"gameplay_url\"]}}",
+            "screenshots": [
+              "={{$node[\"YouTube API\"].json[\"items\"][0][\"snippet\"][\"thumbnails\"][\"high\"][\"url\"]}}"
+            ]
+          },
+          "settings": {
+            "aspect_ratio": "9:16",
+            "voiceover": "male_energetic"
+          }
+        }
+      },
+      "name": "Prepare Veo3 Assets",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1850, 300],
+      "id": "l2m3n4o5-p6q7-8901-r2s3-t4u5v6w7x8y9",
+      "notes": "Structures data for Veo3 API."
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.veo3.ai/v1/generate",
+        "body": {
+          "input": {
+            "script": "={{$node[\"GPT-4 Script\"].json[\"script_text\"]}}",
+            "assets": "={{JSON.stringify($node[\"Prepare Veo3 Assets\"].json[\"assets\"])}}"
+          },
+          "settings": "={{JSON.stringify($node[\"Prepare Veo3 Assets\"].json[\"settings\"])}}"
+        },
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$env.VEO3_API_KEY}}",
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "name": "Veo3 Start Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2050, 300],
+      "id": "m3n4o5p6-q7r8-9012-s3t4-u5v6w7x8y9z0",
+      "notes": "Starts video generation. Requires VEO3_API_KEY."
+    },
+    {
+      "parameters": {
+        "mode": "interval",
+        "interval": 5
+      },
+      "name": "Wait 5s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2250, 300],
+      "id": "n4o5p6q7-r8s9-0123-t4u5-v6w7x8y9z0a1",
+      "notes": "Initial wait before polling."
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.veo3.ai/v1/jobs/{{$node[\"Veo3 Start Job\"].json[\"job_id\"]}}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$env.VEO3_API_KEY}}"
+          }
+        }
+      },
+      "name": "Veo3 Poll Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2450, 300],
+      "id": "o5p6q7r8-s9t0-1234-u5v6-w7x8y9z0a1b2",
+      "notes": "Checks job status. Polls until completion."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$node[\"Veo3 Poll Status\"].json[\"status\"]}}",
+              "operation": "equals",
+              "value2": "completed"
+            }
+          ]
+        }
+      },
+      "name": "Video Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2650, 300],
+      "id": "p6q7r8s9-t0u1-2345-v6w7-x8y9z0a1b2c3",
+      "notes": "Routes based on Veo3 job status."
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.veo3.ai/v1/jobs/{{$node[\"Veo3 Start Job\"].json[\"job_id\"]}}/result",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$env.VEO3_API_KEY}}"
+          }
+        }
+      },
+      "name": "Veo3 Get Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2850, 200],
+      "id": "q7r8s9t0-u1v2-3456-w7x8-y9z0a1b2c3d4",
+      "notes": "Retrieves video download URL."
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "={{$node[\"Veo3 Get Result\"].json[\"download_url\"]}}",
+        "options": {
+          "returnFullResponse": true,
+          "encoding": "arrayBuffer"
+        },
+        "binaryPropertyName": "video"
+      },
+      "name": "Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3050, 200],
+      "id": "r8s9t0u1-v2w3-4567-x8y9-z0a1b2c3d4e5",
+      "notes": "Downloads generated video file."
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "folderId": "={{$env.GOOGLE_DRIVE_FOLDER_ID}}",
+        "file": {
+          "binaryPropertyName": "video"
+        },
+        "options": {
+          "share": true
+        }
+      },
+      "name": "Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [3250, 200],
+      "credentials": {
+        "googleDriveOAuth2Api": "googleDrive"
+      },
+      "id": "s9t0u1v2-w3x4-5678-y9z0-a1b2c3d4e5f6",
+      "notes": "Uploads video to Drive. Requires GOOGLE_DRIVE_FOLDER_ID."
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://graph.facebook.com/v18.0/{{$env.IG_USER_ID}}/media",
+        "body": {
+          "media_type": "REELS",
+          "video_url": "={{$node[\"Upload to Google Drive\"].json[\"webContentLink\"]}}",
+          "caption": "={{$node[\"GPT-4 Description\"].json}}",
+          "share_to_feed": true
+        },
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$env.FB_PAGE_ACCESS_TOKEN}}"
+          }
+        }
+      },
+      "name": "Instagram Create Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3450, 100],
+      "id": "t0u1v2w3-x4y5-6789-z0a1-b2c3d4e5f6g7",
+      "notes": "Step 1: Create media container. Requires IG_USER_ID and FB_PAGE_ACCESS_TOKEN."
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://graph.facebook.com/v18.0/{{$env.IG_USER_ID}}/media_publish",
+        "body": {
+          "creation_id": "={{$node[\"Instagram Create Container\"].json[\"id\"]}}"
+        },
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$env.FB_PAGE_ACCESS_TOKEN}}"
+          }
+        }
+      },
+      "name": "Instagram Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3650, 100],
+      "id": "u1v2w3x4-y5z6-7890-a1b2-c3d4e5f6g7h8",
+      "notes": "Step 2: Publish the container."
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://open-api.tiktok.com/video/upload/",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$env.TIKTOK_ACCESS_TOKEN}}",
+            "Client-Key": "{{$env.TIKTOK_CLIENT_KEY}}"
+          }
+        }
+      },
+      "name": "TikTok Init Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3450, 300],
+      "id": "v2w3x4y5-z6a7-8901-b2c3-d4e5f6g7h8i9",
+      "notes": "Step 1: Get TikTok upload URL. Requires TIKTOK_ACCESS_TOKEN and TIKTOK_CLIENT_KEY."
+    },
+    {
+      "parameters": {
+        "requestMethod": "PUT",
+        "url": "={{$node[\"TikTok Init Upload\"].json[\"upload_url\"]}}",
+        "body": {
+          "video": {
+            "binaryPropertyName": "video"
+          }
+        }
+      },
+      "name": "TikTok Upload Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3650, 300],
+      "id": "w3x4y5z6-a7b8-9012-c3d4-e5f6g7h8i9j0",
+      "notes": "Step 2: Upload video file."
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://open-api.tiktok.com/video/publish/",
+        "body": {
+          "video_id": "={{$node[\"TikTok Upload Video\"].json[\"video_id\"]}}",
+          "post_info": {
+            "title": "={{$node[\"Parse Message\"].json[\"title\"]}}",
+            "description": "={{$node[\"GPT-4 Description\"].json}}",
+            "hashtags": "={{JSON.stringify($node[\"GPT-4 Hashtags\"].json)}}"
+          }
+        },
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$env.TIKTOK_ACCESS_TOKEN}}",
+            "Client-Key": "{{$env.TIKTOK_CLIENT_KEY}}"
+          }
+        }
+      },
+      "name": "TikTok Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3850, 300],
+      "id": "x4y5z6a7-b8c9-0123-d4e5-f6g7h8i9j0k1",
+      "notes": "Step 3: Publish video on TikTok."
+    },
+    {
+      "parameters": {
+        "values": {
+          "status": "published",
+          "instagram_post_id": "={{$node[\"Instagram Publish\"].json[\"id\"]}}",
+          "tiktok_post_id": "={{$node[\"TikTok Publish\"].json[\"post_id\"]}}",
+          "drive_link": "={{$node[\"Upload to Google Drive\"].json[\"webViewLink\"]}}",
+          "published_at": "={{new Date().toISOString()}}"
+        }
+      },
+      "name": "Update Sheet Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [4050, 200],
+      "id": "y5z6a7b8-c9d0-1234-e5f6-g7h8i9j0k1l2",
+      "notes": "Marks row as published with all links."
+    },
+    {
+      "parameters": {
+        "message": "✅ Content published successfully!\n\nTitle: {{$node[\"Parse Message\"].json[\"title\"]}}\nDrive: {{$node[\"Upload to Google Drive\"].json[\"webViewLink\"]}}\nInstagram: {{$node[\"Instagram Publish\"].json[\"id\"]}}\nTikTok: {{$node[\"TikTok Publish\"].json[\"post_id\"]}}",
+        "chatId": "={{$env.TELEGRAM_CHAT_ID}}"
+      },
+      "name": "Telegram Success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [4250, 200],
+      "credentials": {
+        "telegramApi": "={{$env.TELEGRAM_BOT_TOKEN}}"
+      },
+      "id": "z6a7b8c9-d0e1-2345-f6g7-h8i9j0k1l2m3",
+      "notes": "Sends success notification. Requires TELEGRAM_CHAT_ID."
+    },
+    {
+      "parameters": {
+        "mode": "interval",
+        "interval": 10
+      },
+      "name": "Wait Before Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2650, 400],
+      "id": "a7b8c9d0-e1f2-3456-g7h8-i9j0k1l2m3n4",
+      "notes": "Waits before next status check."
+    },
+    {
+      "parameters": {
+        "message": "❌ Error processing content!\n\nTitle: {{$node[\"Parse Message\"].json[\"title\"]}}\nError: {{$node[\"Veo3 Poll Status\"].json[\"error\"]}}\n\nPlease check Google Sheets row.",
+        "chatId": "={{$env.TELEGRAM_CHAT_ID}}"
+      },
+      "name": "Telegram Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2850, 500],
+      "credentials": {
+        "telegramApi": "={{$env.TELEGRAM_BOT_TOKEN}}"
+      },
+      "id": "b8c9d0e1-f2g3-4567-h8i9-j0k1l2m3n4o5",
+      "notes": "Sends error notifications."
+    },
+    {
+      "parameters": {
+        "values": {
+          "status": "error",
+          "last_error": "={{$node[\"Veo3 Poll Status\"].json[\"error\"]}}",
+          "error_at": "={{new Date().toISOString()}}"
+        }
+      },
+      "name": "Mark Error in Sheet",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [3050, 500],
+      "id": "c9d0e1f2-g3h4-5678-i9j0-k1l2m3n4o5p6",
+      "notes": "Records error details in Google Sheet."
+    },
+    {
+      "parameters": {
+        "message": "AppWill Content Factory Setup Guide\n\n1. Set environment variables:\n- TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID\n- GOOGLE_SHEETS_ID, GOOGLE_DRIVE_FOLDER_ID\n- OPENAI_API_KEY, YOUTUBE_API_KEY\n- VEO3_API_KEY\n- FB_PAGE_ACCESS_TOKEN, IG_USER_ID\n- TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, TIKTOK_ACCESS_TOKEN\n\n2. Configure OAuth credentials for:\n- Google Sheets\n- Google Drive\n\n3. Test with Manual Trigger node\n\n4. Monitor progress in Google Sheets\n\n5. Check Telegram for notifications\n\nSample Payload:\nНазвание: 3 Dead Tubbies\nСсылка: https://appwill.co/product/3-deadtubbies/\nЦена: $2,500\nДоход (3 мес): $388\nУстановки: 700K+\nКатегория: Хоррор-шутер\nСсылка на геймплей: https://youtu.be/XXXXX"
+      },
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [250, 100],
+      "id": "d0e1f2g3-h4i5-6789-j0k1-l2m3n4o5p6q7",
+      "notes": "Complete setup instructions."
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Message": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Lookup": {
+      "main": [
+        [
+          {
+            "node": "Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exists?": {
+      "main": [
+        [
+          {
+            "node": "Update Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append Row",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Update Row": {
+      "main": [
+        [
+          {
+            "node": "YouTube API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Row": {
+      "main": [
+        [
+          {
+            "node": "YouTube API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube API": {
+      "main": [
+        [
+          {
+            "node": "GPT-4 Script",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GPT-4 Description",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "GPT-4 Hashtags",
+            "type": "main",
+            "index": 2
+          }
+        ],
+        [
+          {
+            "node": "Prepare Veo3 Assets",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "GPT-4 Script": {
+      "main": [
+        [
+          {
+            "node": "Prepare Veo3 Assets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Veo3 Assets": {
+      "main": [
+        [
+          {
+            "node": "Veo3 Start Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo3 Start Job": {
+      "main": [
+        [
+          {
+            "node": "Wait 5s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5s": {
+      "main": [
+        [
+          {
+            "node": "Veo3 Poll Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo3 Poll Status": {
+      "main": [
+        [
+          {
+            "node": "Video Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Ready?": {
+      "main": [
+        [
+          {
+            "node": "Veo3 Get Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Before Retry",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Veo3 Get Result": {
+      "main": [
+        [
+          {
+            "node": "Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video": {
+      "main": [
+        [
+          {
+            "node": "Upload to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Instagram Create Container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok Init Upload",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Update Sheet Status",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Instagram Create Container": {
+      "main": [
+        [
+          {
+            "node": "Instagram Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram Publish": {
+      "main": [
+        [
+          {
+            "node": "Update Sheet Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok Init Upload": {
+      "main": [
+        [
+          {
+            "node": "TikTok Upload Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok Upload Video": {
+      "main": [
+        [
+          {
+            "node": "TikTok Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok Publish": {
+      "main": [
+        [
+          {
+            "node": "Update Sheet Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Sheet Status": {
+      "main": [
+        [
+          {
+            "node": "Telegram Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retry": {
+      "main": [
+        [
+          {
+            "node": "Veo3 Poll Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Ready?": {
+      "main": [
+        [
+          {
+            "node": "Mark Error in Sheet",
+            "type": "main",
+            "index": 2
+          }
+        ],
+        [
+          {
+            "node": "Telegram Error",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "id": "12345678-90ab-cdef-ghij-klmnopqrstuv",
+  "versionId": "98765432-10fe-dcba-0987-654321abcdef",
+  "tags": [
+    "content-factory",
+    "automation",
+    "social-media"
+  ],
+  "active": true,
+  "createdAt": "2025-08-10T10:00:00.000Z",
+  "updatedAt": "2025-08-10T10:00:00.000Z"
+}
